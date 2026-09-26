@@ -1,62 +1,115 @@
 #include <Arduino.h>
-#include <cmath>
-#include <driver/i2s.h>
+#include <Audio.h>
+#include <SD.h>
+#include <SPI.h>
 
-// MAX98357A connections.
-constexpr int LRC_PIN = 25;
-constexpr int BCLK_PIN = 26;
-constexpr int DIN_PIN = 27;
+// microSD card pins.
+constexpr int SD_SCK_PIN = 18;
+constexpr int SD_MISO_PIN = 19;
+constexpr int SD_MOSI_PIN = 23;
+constexpr int SD_CS_PIN = 5;
 
-constexpr i2s_port_t I2S_PORT = I2S_NUM_0;
-constexpr uint32_t SAMPLE_RATE = 44100;
-constexpr float TONE_FREQUENCY = 1000.0F;
-constexpr float FULL_CIRCLE_RADIANS = 6.28318530718F;
-constexpr size_t FRAME_COUNT = 128;
+// MAX98357A amplifier pins.
+constexpr int I2S_LRC_PIN = 25;
+constexpr int I2S_BCLK_PIN = 26;
+constexpr int I2S_DOUT_PIN = 27;  // Connect this to DIN on the amplifier.
+
+Audio audio;
+String songPath;
+unsigned long lastRestartAttempt = 0;
+
+// Search this folder and its subfolders for the first MP3 file.
+String findFirstMp3(const char *folderPath) {
+  File folder = SD.open(folderPath);
+  if (!folder || !folder.isDirectory()) {
+    folder.close();
+    return "";
+  }
+
+  File entry = folder.openNextFile();
+  while (entry) {
+    String path = entry.path();
+
+    if (entry.isDirectory()) {
+      entry.close();
+      String result = findFirstMp3(path.c_str());
+      if (!result.isEmpty()) {
+        folder.close();
+        return result;
+      }
+    } else {
+      String lowercasePath = path;
+      lowercasePath.toLowerCase();
+      entry.close();
+
+      if (lowercasePath.endsWith(".mp3")) {
+        folder.close();
+        return path;
+      }
+    }
+
+    entry = folder.openNextFile();
+  }
+
+  folder.close();
+  return "";
+}
+
+void startSong() {
+  Serial.printf("Playing: %s\n", songPath.c_str());
+  if (!audio.connecttoFS(SD, songPath.c_str())) {
+    Serial.println("ERROR: The audio library could not open the MP3.");
+  }
+}
 
 void setup() {
-  i2s_config_t config = {};
-  config.mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_TX);
-  config.sample_rate = SAMPLE_RATE;
-  config.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-  config.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
-  config.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-  config.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
-  config.dma_buf_count = 8;
-  config.dma_buf_len = FRAME_COUNT;
-  config.use_apll = false;
-  config.tx_desc_auto_clear = true;
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("Starting SD music test...");
 
-  i2s_pin_config_t pins = {};
-  pins.mck_io_num = I2S_PIN_NO_CHANGE;
-  pins.bck_io_num = BCLK_PIN;
-  pins.ws_io_num = LRC_PIN;
-  pins.data_out_num = DIN_PIN;
-  pins.data_in_num = I2S_PIN_NO_CHANGE;
+  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
+  if (!SD.begin(SD_CS_PIN, SPI, 1000000)) {
+    Serial.println("ERROR: Could not read the SD card.");
+    return;
+  }
+  Serial.println("SD card connected.");
 
-  i2s_driver_install(I2S_PORT, &config, 0, nullptr);
-  i2s_set_pin(I2S_PORT, &pins);
+  songPath = findFirstMp3("/");
+  if (songPath.isEmpty()) {
+    Serial.println("ERROR: No MP3 files were found on the SD card.");
+    return;
+  }
+
+  audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
+  audio.setVolume(21);  // Library range: 0 (silent) to 21 (maximum).
+  startSong();
 }
 
 void loop() {
-  int16_t samples[FRAME_COUNT * 2];
-  static float phase = 0.0F;
-  const float phaseStep =
-      FULL_CIRCLE_RADIANS * TONE_FREQUENCY / SAMPLE_RATE;
+  audio.loop();
 
-  for (size_t frame = 0; frame < FRAME_COUNT; frame++) {
-    const int16_t sample = static_cast<int16_t>(sinf(phase) * 10000);
-
-    // Send the same sound to both the left and right I2S channels.
-    samples[frame * 2] = sample;
-    samples[frame * 2 + 1] = sample;
-
-    phase += phaseStep;
-    if (phase >= FULL_CIRCLE_RADIANS) {
-      phase -= FULL_CIRCLE_RADIANS;
-    }
+  // Restart the file after it finishes or if opening it initially failed.
+  if (!songPath.isEmpty() && !audio.isRunning() &&
+      millis() - lastRestartAttempt >= 1000) {
+    lastRestartAttempt = millis();
+    startSong();
   }
 
-  size_t bytesWritten = 0;
-  i2s_write(I2S_PORT, samples, sizeof(samples), &bytesWritten,
-            portMAX_DELAY);
+  delay(1);
+}
+
+// Diagnostic messages supplied by ESP32-audioI2S.
+void audio_info(const char *message) {
+  Serial.print("Audio: ");
+  Serial.println(message);
+}
+
+void audio_id3data(const char *message) {
+  Serial.print("MP3 tag: ");
+  Serial.println(message);
+}
+
+void audio_eof_mp3(const char *message) {
+  Serial.print("Finished: ");
+  Serial.println(message);
 }
