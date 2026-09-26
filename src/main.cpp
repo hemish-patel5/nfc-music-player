@@ -1,47 +1,34 @@
 #include <Arduino.h>
-#include <FS.h>
-#include <SD.h>
 #include <SPI.h>
 
-// SPI pins used by the microSD card.
+#include "RFIDScanner.h"
+#include "SDCardReader.h"
+
+// Shared SPI pins.
+constexpr uint8_t SPI_SCK_PIN = 18;
+constexpr uint8_t SPI_MISO_PIN = 19;
+constexpr uint8_t SPI_MOSI_PIN = 23;
+
+// Each SPI device has a different chip-select pin.
 constexpr uint8_t SD_CS_PIN = 5;
-constexpr uint8_t SD_SCK_PIN = 18;
-constexpr uint8_t SD_MISO_PIN = 19;
-constexpr uint8_t SD_MOSI_PIN = 23;
-
-// The RC522 shares the SPI bus but has its own chip-select pin.
 constexpr uint8_t RFID_CS_PIN = 21;
+constexpr uint8_t RFID_RESET_PIN = 22;
 
-unsigned int musicFileCount = 0;
+SDCardReader sdCard(SD_CS_PIN, SPI);
+RFIDScanner rfidScanner(RFID_CS_PIN, RFID_RESET_PIN);
 
-// Return true when a filename has a supported music-file extension.
-bool isMusicFile(String fileName) {
-  fileName.toLowerCase();
+void printSavedSongs() {
+  const std::vector<String> &songs = sdCard.songs();
 
-  return fileName.endsWith(".mp3") || fileName.endsWith(".wav") ||
-         fileName.endsWith(".aac") || fileName.endsWith(".m4a") ||
-         fileName.endsWith(".flac") || fileName.endsWith(".ogg");
-}
+  Serial.println("MP3 files on the SD card:");
+  for (size_t i = 0; i < songs.size(); i++) {
+    Serial.print(i + 1);
+    Serial.print(". ");
+    Serial.println(songs[i]);
+  }
 
-// Look through this directory and every directory inside it.
-void printMusicFiles(File directory) {
-  File entry = directory.openNextFile();
-
-  while (entry) {
-    if (entry.isDirectory()) {
-      printMusicFiles(entry);
-    } else if (isMusicFile(entry.name())) {
-      musicFileCount++;
-      Serial.print(musicFileCount);
-      Serial.print(". ");
-      Serial.print(entry.path());
-      Serial.print(" (");
-      Serial.print(entry.size());
-      Serial.println(" bytes)");
-    }
-
-    entry.close();
-    entry = directory.openNextFile();
+  if (songs.empty()) {
+    Serial.println("No MP3 files found.");
   }
 }
 
@@ -49,33 +36,34 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  // The RC522 shares the SPI bus, so keep it deselected.
+  // Deselect both devices before starting their shared SPI bus.
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
   pinMode(RFID_CS_PIN, OUTPUT);
   digitalWrite(RFID_CS_PIN, HIGH);
 
-  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
 
-  if (!SD.begin(SD_CS_PIN, SPI)) {
-    Serial.println("SD card initialization failed.");
-    return;
-  }
-
-  File root = SD.open("/");
-  if (!root || !root.isDirectory()) {
-    Serial.println("Could not open the SD card root directory.");
-    return;
-  }
-
-  Serial.println("Music files on the SD card:");
-  printMusicFiles(root);
-  root.close();
-
-  if (musicFileCount == 0) {
-    Serial.println("No music files found.");
+  if (sdCard.begin() && sdCard.loadSongs()) {
+    printSavedSongs();
   } else {
-    Serial.print("Total music files: ");
-    Serial.println(musicFileCount);
+    Serial.println("Could not read the SD card.");
+  }
+
+  if (rfidScanner.begin()) {
+    Serial.println("RC522 ready. Place an NFC sticker near the reader.");
+  } else {
+    Serial.println("Could not communicate with the RC522.");
   }
 }
 
-void loop() {}
+void loop() {
+  String stickerUid;
+
+  if (rfidScanner.scan(stickerUid)) {
+    Serial.print("NFC sticker UID: ");
+    Serial.println(stickerUid);
+  }
+
+  delay(50);
+}
