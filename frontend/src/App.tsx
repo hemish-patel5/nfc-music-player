@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import './App.css'
-import placeholderAlbumCover from './assets/placeholder-album-cover.png'
+import scorpionAlbumCover from './assets/scorpion-album-cover.png'
 
 type Song = {
   id: number
@@ -140,7 +140,7 @@ function SelectedSongPlayer({
       <h1 id="selected-song-title">Selected Song</h1>
 
       <div className="vinyl-record" aria-hidden="true">
-        <img src={placeholderAlbumCover} alt="" />
+        <img src={scorpionAlbumCover} alt="" />
       </div>
 
       <div className="selected-song-copy">
@@ -211,8 +211,6 @@ function App() {
 
   const selectSong = (song: Song) => {
     setSelectedSongId(song.id)
-    setMetadata({ title: song.title, artist: song.artist, album: song.album })
-    setWriteStatus('idle')
   }
 
   const acceptFile = (file?: File) => {
@@ -248,8 +246,6 @@ function App() {
   }
 
   const continueWithSelection = () => {
-    const song = SONGS.find((item) => item.id === selectedSongId)
-    if (song) selectSong(song)
     setIsPlayerOpen(true)
     setIsPlaying(true)
   }
