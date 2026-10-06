@@ -12,7 +12,7 @@ type Song = {
 type WriteStatus = 'idle' | 'writing' | 'complete'
 
 const SONGS: Song[] = [
-  { id: 1, title: "God's Plan", artist: 'Drake', album: 'Scorpion' },
+  { id: 1, title: 'God’s Plan', artist: 'Drake', album: 'Scorpion' },
   { id: 2, title: 'Tech Noir', artist: 'Gunship', album: 'Gunship' },
   { id: 3, title: 'Midnight City', artist: 'M83', album: "Hurry Up, We're Dreaming" },
   { id: 4, title: 'Blood // Water', artist: 'grandson', album: 'A Modern Tragedy Vol. 1' },
@@ -28,7 +28,7 @@ const SONGS: Song[] = [
 
 function SearchIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
+    <svg viewBox="4 4 17 17" aria-hidden="true">
       <circle cx="10.8" cy="10.8" r="6.2" />
       <path d="m15.5 15.5 4.1 4.1" />
     </svg>
@@ -47,22 +47,32 @@ function MusicIcon() {
 function FileMusicIcon() {
   return (
     <svg viewBox="0 0 48 48" aria-hidden="true">
-      <path d="M13 4h15l9 9v29H13z" />
-      <path d="M28 4v10h9M25 21v13M25 24l7-2v10" />
-      <circle cx="20.5" cy="34.5" r="4.5" />
-      <circle cx="27.5" cy="32.5" r="4.5" />
+      <path d="M8 2h20l11 11v33H8z" />
+      <path d="M28 2v12h11M24 20v16M24 24l9-2v12" />
+      <circle cx="18.5" cy="37" r="4.5" />
+      <circle cx="28.5" cy="34" r="4.5" />
     </svg>
   )
 }
 
 function NfcIcon({ compact = false }: { compact?: boolean }) {
+  if (!compact) {
+    return (
+      <svg className="nfc-icon" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="48" />
+        <path d="M17 61V40l18 21V39" />
+        <path d="M56 29c15 11 15 31 0 43" />
+        <path d="M69 18c26 18 26 46 0 64" />
+      </svg>
+    )
+  }
+
   return (
     <svg
-      className={compact ? 'nfc-icon nfc-icon--compact' : 'nfc-icon'}
-      viewBox="0 0 120 120"
+      className="nfc-icon nfc-icon--compact"
+      viewBox="20 20 96 84"
       aria-hidden="true"
     >
-      {!compact && <circle cx="60" cy="60" r="47" />}
       <path d="M28 73V48l20 24V47" />
       <path d="M57 45c13 10 13 28 0 38M69 35c22 16 22 44 0 60M81 25c31 23 31 56 0 77" />
     </svg>
@@ -74,7 +84,7 @@ function App() {
   const [selectedSongId, setSelectedSongId] = useState(1)
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [writeStatus, setWriteStatus] = useState<WriteStatus>('idle')
+  const [writeStatus, setWriteStatus] = useState<WriteStatus>('writing')
   const [metadata, setMetadata] = useState({
     title: 'Shadows',
     artist: 'Gunship',
@@ -119,8 +129,6 @@ function App() {
   }
 
   const writeToTag = () => {
-    if (writeStatus === 'writing') return
-
     if (writeTimer.current !== null) {
       window.clearTimeout(writeTimer.current)
     }
@@ -181,7 +189,7 @@ function App() {
                   <span className="song-art"><MusicIcon /></span>
                   <span className="song-copy">
                     <strong>{song.title}</strong>
-                    <span>{song.artist} • {song.album}</span>
+                    <span>{song.artist}{isSelected ? '' : ` • ${song.album}`}</span>
                   </span>
                   <span className="song-indicator" aria-hidden="true" />
                 </button>
@@ -256,10 +264,9 @@ function App() {
           className="write-button"
           type="button"
           onClick={writeToTag}
-          disabled={writeStatus === 'writing'}
         >
           <NfcIcon compact />
-          <span>{writeStatus === 'writing' ? 'WRITING TO NFC TAG...' : 'WRITE TO NFC TAG'}</span>
+          <span>WRITE TO NFC TAG</span>
         </button>
 
         <p className={`write-status write-status--${writeStatus}`} role="status">
