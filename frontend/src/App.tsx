@@ -130,14 +130,22 @@ function SelectedSongPlayer({
   song,
   isPlaying,
   onTogglePlaying,
+  onBack,
 }: {
   song: Song
   isPlaying: boolean
   onTogglePlaying: () => void
+  onBack: () => void
 }) {
   return (
     <section className="selected-player" aria-labelledby="selected-song-title">
       <h1 id="selected-song-title">Selected Song</h1>
+      <button className="library-back-button" type="button" onClick={onBack} aria-label="Back to song library">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m10 6-5 5 5 5" />
+          <path d="M5 11h7.5a6.5 6.5 0 0 1 6.5 6.5V19" />
+        </svg>
+      </button>
 
       <div className="vinyl-record" aria-hidden="true">
         <img src={scorpionAlbumCover} alt="" />
@@ -264,15 +272,14 @@ function App() {
           song={selectedSong}
           isPlaying={isPlaying}
           onTogglePlaying={() => setIsPlaying((current) => !current)}
+          onBack={() => setIsPlayerOpen(false)}
         />
       ) : <section className="library-panel" aria-labelledby="library-title">
         <div className="library-content">
           <header className="library-header">
             <div>
-              <h1 id="library-title">Saved Song Library</h1>
-              <p>Your saved tracks, ready for quick access.</p>
+              <h1 id="library-title">Library of Songs</h1>
             </div>
-            <span className="saved-count">{SONGS.length} saved</span>
           </header>
 
           <label className="search-box">
@@ -302,7 +309,6 @@ function App() {
                     <strong>{song.title}</strong>
                     <span>{song.artist}{isSelected ? '' : ` • ${song.album}`}</span>
                   </span>
-                  <span className="song-indicator" aria-hidden="true" />
                 </button>
               )
             })}
@@ -314,7 +320,7 @@ function App() {
         </div>
 
         <footer className="library-footer">
-          <span>{visibleSongs.length} of {matchingSongs.length} saved songs shown</span>
+          <span>{visibleSongs.length} of {matchingSongs.length} songs shown</span>
           <button type="button" onClick={continueWithSelection}>Select</button>
         </footer>
       </section>}

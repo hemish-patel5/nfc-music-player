@@ -48,6 +48,43 @@
   font-weight: 700;
 }
 
+.library-back-button {
+  position: absolute;
+  top: 5px;
+  right: 20px;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--red);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.library-back-button svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.library-back-button:hover {
+  background: #e91d34;
+}
+
+.library-back-button:focus-visible {
+  outline: 3px solid rgb(250 35 59 / 22%);
+  outline-offset: 2px;
+}
+
 .vinyl-record {
   position: absolute;
   top: 42px;
@@ -78,12 +115,11 @@
 .selected-song-copy {
   position: absolute;
   top: 478px;
-  left: 50%;
-  width: calc(100% - 42px);
+  left: 95px;
+  width: 420px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  transform: translateX(-50%);
   text-align: center;
 }
 
@@ -370,13 +406,7 @@
   background: #fff;
   text-align: left;
   cursor: pointer;
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
-}
-
-.song-row:hover {
-  border-color: #fd8d99;
-  background: var(--surface-soft);
-  transform: translateX(2px);
+  transition: border-color 140ms ease, background 140ms ease;
 }
 
 .song-row:focus-visible {
@@ -440,18 +470,6 @@
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.song-indicator {
-  width: 56px;
-  height: 28px;
-  flex: 0 0 56px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-}
-
-.song-row--selected .song-indicator {
-  background: #fff;
 }
 
 .empty-library {
@@ -806,11 +824,6 @@
     padding-inline: 16px;
   }
 
-  .song-indicator {
-    width: 40px;
-    flex-basis: 40px;
-  }
-
   .writer-panel {
     padding-inline: 22px;
   }
@@ -864,10 +877,6 @@
 
   .library-header p {
     font-size: 14px;
-  }
-
-  .song-indicator {
-    display: none;
   }
 
   .library-footer {
