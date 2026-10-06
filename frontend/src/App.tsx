@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import './App.css'
+import placeholderAlbumCover from './assets/placeholder-album-cover.png'
 
 type Song = {
   id: number
@@ -58,12 +59,15 @@ function FileMusicIcon() {
 function NfcIcon({ compact = false }: { compact?: boolean }) {
   if (!compact) {
     return (
-      <svg className="nfc-icon" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="48" />
-        <path d="M17 61V40l18 21V39" />
-        <path d="M56 29c15 11 15 31 0 43" />
-        <path d="M69 18c26 18 26 46 0 64" />
-      </svg>
+      <span className="reader-symbol" aria-hidden="true">
+        <svg width="69" height="68" viewBox="0 0 69 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M1.80554 45.4003V23.7336L18.6083 41.7892V21.0253M27.4518 19.2197C36.8849 28.8494 36.8849 38.7799 27.4518 49.0114M39.8328 10.192C54.572 25.8401 54.572 41.7892 39.8328 58.0392M53.0981 1.16418C71.3747 22.8309 71.3747 44.4975 53.0981 66.1642"
+            stroke="#FA233B"
+            strokeWidth="3.61111"
+          />
+        </svg>
+      </span>
     )
   }
 
@@ -79,9 +83,112 @@ function NfcIcon({ compact = false }: { compact?: boolean }) {
   )
 }
 
+function WritingSpinner() {
+  return (
+    <span className="status-spinner" aria-hidden="true">
+      <span /><span /><span /><span /><span /><span />
+      <span /><span /><span /><span /><span /><span />
+    </span>
+  )
+}
+
+const WAVEFORM_HEIGHTS = [
+  5, 6, 7, 9, 13, 19, 25, 42, 76, 54, 22, 45, 65, 43, 22, 11, 12, 17, 35,
+  63, 39, 18, 10, 16, 23, 39, 63, 90, 65, 33, 17, 9, 12, 19, 12, 8, 11, 20,
+  32, 51, 34, 15, 10, 14, 23, 42, 32, 18, 11, 9, 18, 29, 42, 29, 14, 8, 5, 4,
+]
+
+function ShuffleIcon() {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M3 8h4c7.5 0 8.5 16 17 16h5M24 19l5 5-5 5M3 24h4c2.6 0 4.5-2 6.2-4.7M20 8.7C21.2 8.2 22.5 8 24 8h5M24 3l5 5-5 5" />
+    </svg>
+  )
+}
+
+function RepeatIcon() {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M27 12V8H8a5 5 0 0 0-5 5v1M22 3l5 5-5 5M5 20v4h19a5 5 0 0 0 5-5v-1M10 29l-5-5 5-5" />
+    </svg>
+  )
+}
+
+function SkipIcon({ direction }: { direction: 'previous' | 'next' }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      {direction === 'previous' ? (
+        <><path d="M27 5 9 16l18 11V5Z" /><path d="M5 5v22" /></>
+      ) : (
+        <><path d="m5 5 18 11L5 27V5Z" /><path d="M27 5v22" /></>
+      )}
+    </svg>
+  )
+}
+
+function SelectedSongPlayer({
+  song,
+  isPlaying,
+  onTogglePlaying,
+}: {
+  song: Song
+  isPlaying: boolean
+  onTogglePlaying: () => void
+}) {
+  return (
+    <section className="selected-player" aria-labelledby="selected-song-title">
+      <h1 id="selected-song-title">Selected Song</h1>
+
+      <div className="vinyl-record" aria-hidden="true">
+        <img src={placeholderAlbumCover} alt="" />
+      </div>
+
+      <div className="selected-song-copy">
+        <h2>{song.title}</h2>
+        <p>{song.artist}</p>
+      </div>
+
+      <div className="waveform" aria-hidden="true">
+        {WAVEFORM_HEIGHTS.map((height, index) => (
+          <span key={index} style={{ height }} />
+        ))}
+      </div>
+
+      <div className="track-progress">
+        <div className="track-progress__rail">
+          <span />
+          <i />
+        </div>
+        <div className="track-progress__time">
+          <span>2:15</span>
+          <span>4:32</span>
+        </div>
+      </div>
+
+      <div className="player-controls">
+        <button type="button" aria-label="Shuffle"><ShuffleIcon /></button>
+        <button type="button" aria-label="Previous song"><SkipIcon direction="previous" /></button>
+        <button
+          className="play-pause-button"
+          type="button"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          onClick={onTogglePlaying}
+        >
+          {isPlaying ? <span className="pause-bars" aria-hidden="true"><i /><i /></span> : <span className="play-triangle" aria-hidden="true" />}
+        </button>
+        <button type="button" aria-label="Next song"><SkipIcon direction="next" /></button>
+        <button type="button" aria-label="Shuffle queue"><ShuffleIcon /></button>
+        <button type="button" aria-label="Repeat"><RepeatIcon /></button>
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [search, setSearch] = useState('')
   const [selectedSongId, setSelectedSongId] = useState(1)
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(true)
   const [isDragging, setIsDragging] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [writeStatus, setWriteStatus] = useState<WriteStatus>('writing')
@@ -100,6 +207,7 @@ function App() {
     )
   })
   const visibleSongs = matchingSongs.slice(0, 8)
+  const selectedSong = SONGS.find((song) => song.id === selectedSongId) ?? SONGS[0]
 
   const selectSong = (song: Song) => {
     setSelectedSongId(song.id)
@@ -142,7 +250,8 @@ function App() {
   const continueWithSelection = () => {
     const song = SONGS.find((item) => item.id === selectedSongId)
     if (song) selectSong(song)
-    document.querySelector('.writer-panel')?.scrollIntoView({ behavior: 'smooth' })
+    setIsPlayerOpen(true)
+    setIsPlaying(true)
   }
 
   const statusText =
@@ -154,7 +263,13 @@ function App() {
 
   return (
     <main className="dashboard-shell">
-      <section className="library-panel" aria-labelledby="library-title">
+      {isPlayerOpen ? (
+        <SelectedSongPlayer
+          song={selectedSong}
+          isPlaying={isPlaying}
+          onTogglePlaying={() => setIsPlaying((current) => !current)}
+        />
+      ) : <section className="library-panel" aria-labelledby="library-title">
         <div className="library-content">
           <header className="library-header">
             <div>
@@ -206,7 +321,7 @@ function App() {
           <span>{visibleSongs.length} of {matchingSongs.length} saved songs shown</span>
           <button type="button" onClick={continueWithSelection}>Select</button>
         </footer>
-      </section>
+      </section>}
 
       <div className="panel-divider" aria-hidden="true" />
 
@@ -231,9 +346,11 @@ function App() {
         >
           <input type="file" accept=".mp3,audio/mpeg" onChange={handleFileInput} />
           <FileMusicIcon />
-          <strong>{uploadedFile ? uploadedFile.name : 'DRAG & DROP MP3 FILE HERE'}</strong>
-          <span>or</span>
-          <em>[Browse Files]</em>
+          <span className="upload-instructions">
+            <strong>{uploadedFile ? uploadedFile.name : 'DRAG & DROP MP3 FILE HERE'}</strong>
+            <span>or</span>
+            <em>[Browse Files]</em>
+          </span>
         </label>
 
         <div className="metadata-grid">
@@ -270,8 +387,8 @@ function App() {
         </button>
 
         <p className={`write-status write-status--${writeStatus}`} role="status">
-          <span className="status-spinner" aria-hidden="true" />
-          {statusText}
+          <WritingSpinner />
+          <span className="write-message">{statusText}</span>
         </p>
       </section>
     </main>
