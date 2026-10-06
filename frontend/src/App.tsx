@@ -54,7 +54,7 @@ function FileMusicIcon() {
 
 function NfcIcon({ compact = false }: { compact?: boolean }) {
   if (!compact) return (
-    <span className="grid h-[101px] w-[101px] place-items-center rounded-full border-4 border-[#fa233b]" aria-hidden="true">
+    <span className="grid h-[101px] w-[101px] place-items-center rounded-full border-4 border-[#fa233b] bg-white" aria-hidden="true">
       <svg width="69" height="68" viewBox="0 0 69 68" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.80554 45.4003V23.7336L18.6083 41.7892V21.0253M27.4518 19.2197C36.8849 28.8494 36.8849 38.7799 27.4518 49.0114M39.8328 10.192C54.572 25.8401 54.572 41.7892 39.8328 58.0392M53.0981 1.16418C71.3747 22.8309 71.3747 44.4975 53.0981 66.1642" stroke={RED} strokeWidth="3.61111" /></svg>
     </span>
   )
@@ -167,7 +167,7 @@ function App() {
 
       <section className="min-w-0 overflow-auto border border-[#e7e7ec] bg-white px-7 pt-1 pb-[22px] max-[980px]:px-[22px] max-[760px]:min-h-svh max-[760px]:px-5 max-[760px]:py-6" aria-labelledby="writer-title">
         <h1 className="m-0 ml-[-9px] text-[26px] leading-[31px] font-bold text-[#202024]" id="writer-title">NFC Tag Manager &amp; MP3 Writer</h1>
-        <div className="mx-auto mt-[37px] mb-5 grid h-[150px] w-[263px] place-items-center rounded-xl border-[2.5px] border-[#fa233b] bg-[#fff6f7] shadow-[0_5px_20px_rgba(250,35,59,0.1255)] max-[520px]:w-[min(262px,80%)]" aria-label="NFC reader connected"><NfcIcon /></div>
+        <div className="mx-auto mt-[37px] mb-5 grid h-[150px] w-[263px] place-items-center rounded-xl border-[2.5px] border-[#fa233b] bg-[#fff6f7] max-[520px]:w-[min(262px,80%)]" aria-label="NFC reader connected"><NfcIcon /></div>
         <p className="mb-[19px] flex items-center justify-center text-xl leading-6 font-semibold text-[#278447]">NFC Reader Connected - Ready</p>
         <h2 className="mb-[14px] ml-[-2px] text-[26px] leading-[31px] font-bold text-[#202024]">MP3 File Upload</h2>
         <label className={`flex h-[187px] min-h-[187px] cursor-pointer flex-col items-center justify-center gap-[9px] rounded-xl border-2 border-dashed border-[#fa233b] p-0 text-[#fa233b] transition-[background-color,transform] duration-150 hover:-translate-y-px hover:bg-[#ffeef1] ${isDragging ? '-translate-y-px bg-[#ffeef1]' : 'bg-[#fff6f7]'}`} onDragEnter={(event) => { event.preventDefault(); setIsDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setIsDragging(false)} onDrop={handleDrop}>
