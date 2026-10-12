@@ -1,24 +1,43 @@
 #include <Arduino.h>
-#include <Audio.h>
+#include <AudioFileSourceSD.h>
+#include <AudioGeneratorMP3.h>
+#include <AudioOutputI2S.h>
 #include <SD.h>
 #include <SPI.h>
 
-// microSD card pins.
-constexpr int SD_SCK_PIN = 18;
-constexpr int SD_MISO_PIN = 19;
-constexpr int SD_MOSI_PIN = 23;
-constexpr int SD_CS_PIN = 5;
+#include "RFIDScanner.h"
 
-// MAX98357A amplifier pins.
-constexpr int I2S_LRC_PIN = 25;
-constexpr int I2S_BCLK_PIN = 26;
-constexpr int I2S_DOUT_PIN = 27;  // Connect this to DIN on the amplifier.
+// Shared SPI bus: microSD module and RC522.
+constexpr uint8_t SPI_SCK_PIN = 4;
+constexpr uint8_t SPI_MISO_PIN = 5;
+constexpr uint8_t SPI_MOSI_PIN = 6;
 
-Audio audio;
+// microSD module.
+constexpr uint8_t SD_CS_PIN = 7;
+
+// MAX98357A I2S amplifier.
+constexpr uint8_t I2S_LRC_PIN = 0;
+constexpr uint8_t I2S_BCLK_PIN = 1;
+constexpr uint8_t I2S_DOUT_PIN = 3;  // Connects to DIN on the amplifier.
+
+// RC522 RFID reader.
+constexpr uint8_t RFID_CS_PIN = 10;  // Labelled SDA or SS on the RC522.
+constexpr uint8_t RFID_RST_PIN = 20;
+
+constexpr uint32_t SD_SPI_FREQUENCY = 1000000;
+constexpr uint32_t SONG_RESTART_DELAY_MS = 1000;
+constexpr uint32_t RFID_SCAN_INTERVAL_MS = 100;
+
+RFIDScanner rfid(RFID_CS_PIN, RFID_RST_PIN);
+AudioGeneratorMP3 mp3;
+AudioOutputI2S audioOutput;
+AudioFileSourceSD *audioFile = nullptr;
+
 String songPath;
-unsigned long lastRestartAttempt = 0;
+uint32_t lastRestartAttempt = 0;
+uint32_t lastRfidScan = 0;
 
-// Search this folder and its subfolders for the first MP3 file.
+// Search a folder and its subfolders for the first MP3 file.
 String findFirstMp3(const char *folderPath) {
   File folder = SD.open(folderPath);
   if (!folder || !folder.isDirectory()) {
@@ -28,11 +47,11 @@ String findFirstMp3(const char *folderPath) {
 
   File entry = folder.openNextFile();
   while (entry) {
-    String path = entry.path();
+    const String path = entry.path();
 
     if (entry.isDirectory()) {
       entry.close();
-      String result = findFirstMp3(path.c_str());
+      const String result = findFirstMp3(path.c_str());
       if (!result.isEmpty()) {
         folder.close();
         return result;
@@ -55,61 +74,129 @@ String findFirstMp3(const char *folderPath) {
   return "";
 }
 
+void closeAudioFile() {
+  if (audioFile == nullptr) {
+    return;
+  }
+
+  audioFile->close();
+  delete audioFile;
+  audioFile = nullptr;
+}
+
 void startSong() {
+  if (songPath.isEmpty()) {
+    return;
+  }
+
+  if (mp3.isRunning()) {
+    mp3.stop();
+  }
+  closeAudioFile();
+
   Serial.printf("Playing: %s\n", songPath.c_str());
-  if (!audio.connecttoFS(SD, songPath.c_str())) {
-    Serial.println("ERROR: The audio library could not open the MP3.");
+  audioFile = new AudioFileSourceSD(songPath.c_str());
+
+  if (audioFile == nullptr || !audioFile->isOpen()) {
+    Serial.println("ERROR: Could not open the MP3 file.");
+    closeAudioFile();
+    return;
+  }
+
+  if (!mp3.begin(audioFile, &audioOutput)) {
+    Serial.println("ERROR: Could not start the MP3 decoder.");
+    closeAudioFile();
+  }
+}
+
+void initializeSharedSpiBus() {
+  // Keep both SPI devices deselected while configuring the shared bus.
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
+  pinMode(RFID_CS_PIN, OUTPUT);
+  digitalWrite(RFID_CS_PIN, HIGH);
+
+  SPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN);
+}
+
+void initializeSdCard() {
+  if (!SD.begin(SD_CS_PIN, SPI, SD_SPI_FREQUENCY)) {
+    Serial.println("ERROR: Could not read the SD card.");
+    return;
+  }
+
+  Serial.println("SD card connected.");
+  songPath = findFirstMp3("/");
+
+  if (songPath.isEmpty()) {
+    Serial.println("ERROR: No MP3 files were found on the SD card.");
+  } else {
+    Serial.printf("Found MP3: %s\n", songPath.c_str());
+  }
+}
+
+void initializeAudio() {
+  if (!audioOutput.SetPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN)) {
+    Serial.println("ERROR: Could not configure the I2S pins.");
+    return;
+  }
+
+  audioOutput.SetGain(1.0F);
+  startSong();
+}
+
+void initializeRfid() {
+  if (rfid.begin()) {
+    Serial.println("RC522 connected. Scan an RFID sticker.");
+  } else {
+    Serial.println("ERROR: RC522 was not detected.");
+  }
+}
+
+void updateAudio() {
+  if (mp3.isRunning()) {
+    if (!mp3.loop()) {
+      mp3.stop();
+      closeAudioFile();
+      lastRestartAttempt = millis();
+      Serial.println("Song finished. Restarting shortly...");
+    }
+    return;
+  }
+
+  if (!songPath.isEmpty() &&
+      millis() - lastRestartAttempt >= SONG_RESTART_DELAY_MS) {
+    lastRestartAttempt = millis();
+    startSong();
+  }
+}
+
+void scanRfid() {
+  if (millis() - lastRfidScan < RFID_SCAN_INTERVAL_MS) {
+    return;
+  }
+  lastRfidScan = millis();
+
+  String uid;
+  if (rfid.scan(uid)) {
+    Serial.printf("RFID UID: %s\n", uid.c_str());
   }
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
-  Serial.println("Starting SD music test...");
+  delay(1000);
+  Serial.println("Starting ESP32-C3 RFID music player...");
 
-  SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, SD_CS_PIN);
-  if (!SD.begin(SD_CS_PIN, SPI, 1000000)) {
-    Serial.println("ERROR: Could not read the SD card.");
-    return;
-  }
-  Serial.println("SD card connected.");
-
-  songPath = findFirstMp3("/");
-  if (songPath.isEmpty()) {
-    Serial.println("ERROR: No MP3 files were found on the SD card.");
-    return;
-  }
-
-  audio.setPinout(I2S_BCLK_PIN, I2S_LRC_PIN, I2S_DOUT_PIN);
-  audio.setVolume(21);  // Library range: 0 (silent) to 21 (maximum).
-  startSong();
+  initializeSharedSpiBus();
+  initializeSdCard();
+  initializeRfid();
+  initializeAudio();
 }
 
 void loop() {
-  audio.loop();
-
-  // Restart the file after it finishes or if opening it initially failed.
-  if (!songPath.isEmpty() && !audio.isRunning() &&
-      millis() - lastRestartAttempt >= 1000) {
-    lastRestartAttempt = millis();
-    startSong();
-  }
-
+  // Audio decoding must run as often as possible to prevent dropouts.
+  updateAudio();
+  scanRfid();
   delay(1);
-}
-
-// Diagnostic messages supplied by ESP32-audioI2S.
-void audio_info(const char *message) {
-  Serial.print("Audio: ");
-  Serial.println(message);
-}
-
-void audio_id3data(const char *message) {
-  Serial.print("MP3 tag: ");
-  Serial.println(message);
-}
-
-void audio_eof_mp3(const char *message) {
-  Serial.print("Finished: ");
-  Serial.println(message);
 }
