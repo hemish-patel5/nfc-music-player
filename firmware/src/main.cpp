@@ -1,13 +1,34 @@
 #include <Arduino.h>
 #include <SPI.h>
-#include <SD.h>
 
-#define SPI_SCK   18
-#define SPI_MISO  19
-#define SPI_MOSI  23
+#include "Pins.h"
+#include "SdStorage.h"
+#include "ConfigService.h"
+#include "NfcReader.h"
 
-#define SD_CS     5
-#define RFID_CS   21
+
+// =====================================
+// Services
+// =====================================
+
+SdStorage storage(
+    Pins::SD_CS,
+    Pins::SPI_SCK,
+    Pins::SPI_MISO,
+    Pins::SPI_MOSI
+);
+
+ConfigService config(storage);
+
+NfcReader nfc(
+    Pins::RFID_CS,
+    Pins::RFID_RST
+);
+
+
+// =====================================
+// Setup
+// =====================================
 
 void setup()
 {
@@ -16,112 +37,198 @@ void setup()
     delay(1000);
 
     Serial.println();
-    Serial.println("======================");
-    Serial.println(" SHARED SPI SD TEST");
-    Serial.println("======================");
+    Serial.println("================================");
+    Serial.println("       NFC MUSIC PLAYER");
+    Serial.println("      NFC + SD + CONFIG");
+    Serial.println("================================");
+    Serial.println();
 
 
-    // Both devices deselected
-    pinMode(SD_CS, OUTPUT);
-    pinMode(RFID_CS, OUTPUT);
+    // ---------------------------------
+    // Prepare SPI chip selects
+    // ---------------------------------
 
-    digitalWrite(SD_CS, HIGH);
-    digitalWrite(RFID_CS, HIGH);
+    pinMode(Pins::SD_CS, OUTPUT);
+    pinMode(Pins::RFID_CS, OUTPUT);
+
+    digitalWrite(Pins::SD_CS, HIGH);
+    digitalWrite(Pins::RFID_CS, HIGH);
 
     delay(100);
 
 
-    // Shared SPI bus
+    // ---------------------------------
+    // Start shared SPI bus ONCE
+    // ---------------------------------
+
     SPI.begin(
-        SPI_SCK,
-        SPI_MISO,
-        SPI_MOSI
+        Pins::SPI_SCK,
+        Pins::SPI_MISO,
+        Pins::SPI_MOSI
     );
 
     delay(100);
 
 
-    Serial.println("Mounting SD...");
+    // ---------------------------------
+    // SD card
+    // ---------------------------------
 
+    Serial.println("[BOOT] SD card");
 
-    if (!SD.begin(
-        SD_CS,
-        SPI,
-        4000000
-    ))
+    if (!storage.begin())
     {
-        Serial.println(
-            "SD MOUNT FAILED"
-        );
-
+        Serial.println("[FAIL] SD card");
         return;
     }
 
+    Serial.println("[ OK ] SD card");
+
+
+    // ---------------------------------
+    // Config
+    // ---------------------------------
+
+    Serial.println();
+    Serial.println("[BOOT] Config");
+
+    if (!config.load())
+    {
+        Serial.println("[FAIL] Config");
+        return;
+    }
+
+    Serial.println("[ OK ] Config");
+
+    Serial.print("[CONFIG] Version: ");
+    Serial.println(config.getVersion());
+
+    Serial.print("[CONFIG] Discs: ");
+    Serial.println(config.getDiscCount());
+
+
+    // ---------------------------------
+    // NFC reader
+    // ---------------------------------
+
+    Serial.println();
+    Serial.println("[BOOT] NFC reader");
+
+    nfc.begin();
+
+    Serial.println("[ OK ] NFC reader");
+
+
+    Serial.println();
+    Serial.println("================================");
+    Serial.println("          SYSTEM READY");
+    Serial.println("================================");
+    Serial.println();
 
     Serial.println(
-        "SD MOUNT SUCCESS"
+        "Place a sticker near the reader..."
     );
-
-
-    Serial.print("Card size: ");
-
-    Serial.print(
-        SD.cardSize() /
-        (1024ULL * 1024ULL)
-    );
-
-    Serial.println(" MB");
-
-
-    Serial.println();
-    Serial.println("Files in /music:");
-
-
-    File directory =
-        SD.open("/music");
-
-
-    if (!directory)
-    {
-        Serial.println(
-            "Could not open /music"
-        );
-
-        return;
-    }
-
-
-    File file =
-        directory.openNextFile();
-
-
-    while (file)
-    {
-        Serial.print("  ");
-
-        Serial.print(
-            file.name()
-        );
-
-        Serial.print(" - ");
-
-        Serial.print(
-            file.size()
-        );
-
-        Serial.println(" bytes");
-
-
-        file =
-            directory.openNextFile();
-    }
-
-
-    Serial.println();
-    Serial.println("Test complete.");
 }
 
 
+// =====================================
+// Main loop
+// =====================================
+
 void loop()
 {
+    String uid;
+
+
+    // ---------------------------------
+    // Try reading NFC tag
+    // ---------------------------------
+
+    if (!nfc.readUid(uid))
+    {
+        return;
+    }
+
+
+    Serial.println();
+    Serial.println("------------------------------");
+
+    Serial.print("[NFC] UID: ");
+    Serial.println(uid);
+
+
+    // ---------------------------------
+    // Find disc in config
+    // ---------------------------------
+
+    DiscInfo disc;
+
+    if (!config.findByUid(uid, disc))
+    {
+        Serial.println(
+            "[DISC] Unknown NFC sticker"
+        );
+
+        Serial.println("------------------------------");
+
+        delay(500);
+
+        return;
+    }
+
+
+    Serial.print("[DISC] Disc #: ");
+    Serial.println(disc.discId);
+
+
+    // ---------------------------------
+    // Check whether assigned
+    // ---------------------------------
+
+    if (disc.file.length() == 0)
+    {
+        Serial.println(
+            "[DISC] No song assigned"
+        );
+
+        Serial.println("------------------------------");
+
+        delay(500);
+
+        return;
+    }
+
+
+    Serial.print("[DISC] Title: ");
+    Serial.println(disc.title);
+
+    Serial.print("[DISC] File: ");
+    Serial.println(disc.file);
+
+
+    // ---------------------------------
+    // Confirm MP3 file exists
+    // ---------------------------------
+
+    if (storage.exists(disc.file))
+    {
+        Serial.println(
+            "[ OK ] MP3 file exists"
+        );
+
+        Serial.println(
+            "[PLAYER] Ready to play"
+        );
+    }
+    else
+    {
+        Serial.println(
+            "[FAIL] MP3 file missing"
+        );
+    }
+
+
+    Serial.println("------------------------------");
+
+    delay(1000);
 }

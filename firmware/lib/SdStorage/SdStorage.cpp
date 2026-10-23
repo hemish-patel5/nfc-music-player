@@ -26,13 +26,11 @@ bool SdStorage::begin()
     pinMode(_csPin, OUTPUT);
     digitalWrite(_csPin, HIGH);
 
-    delay(10);
-
-    // IMPORTANT:
-    // SPI.begin() is NOT called here.
-    // main.cpp owns the shared SPI bus.
-
-    if (!SD.begin(_csPin, SPI, 4000000))
+    if (!SD.begin(
+        _csPin,
+        SPI,
+        4000000
+    ))
     {
         Serial.println("[SD] ERROR: Mount failed");
 
@@ -60,6 +58,7 @@ bool SdStorage::begin()
 
     return true;
 }
+
 
 bool SdStorage::exists(const String& path)
 {
