@@ -179,18 +179,14 @@ void AudioPlayer::stop()
         }
     }
 
-
     if (_file != nullptr)
     {
         delete _file;
-
         _file = nullptr;
     }
 
-
     _paused = false;
 }
-
 
 // =====================================
 // Update
@@ -244,20 +240,30 @@ void AudioPlayer::pause()
         return;
     }
 
-
     if (!_mp3->isRunning())
     {
         return;
     }
-
 
     if (_paused)
     {
         return;
     }
 
-
+    // Stop advancing the MP3 decoder
     _paused = true;
+
+    if (_output != nullptr)
+    {
+        // Mute first
+        _output->SetGain(0.0f);
+
+        // Push silence through the remaining DMA buffer
+        _output->flush();
+
+        // Completely stop the I2S peripheral
+        _output->stop();
+    }
 
     Serial.println(
         "[AUDIO] Paused"
@@ -276,18 +282,34 @@ void AudioPlayer::resume()
         return;
     }
 
-
     if (!_mp3->isRunning())
     {
         return;
     }
-
 
     if (!_paused)
     {
         return;
     }
 
+    if (_output != nullptr)
+    {
+        // Restart I2S
+        if (!_output->begin())
+        {
+            Serial.println(
+                "[AUDIO] ERROR: Could not restart I2S"
+            );
+
+            return;
+        }
+
+        // Restore selected volume
+        float gain =
+            (_volume / 20.0f) * 0.50f;
+
+        _output->SetGain(gain);
+    }
 
     _paused = false;
 
