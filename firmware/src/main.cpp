@@ -1,34 +1,40 @@
 #include <Arduino.h>
 #include <SPI.h>
+#include <SD.h>
 
-#include "Pins.h"
-#include "SdStorage.h"
-#include "ConfigService.h"
-#include "NfcReader.h"
-
-
-// =====================================
-// Services
-// =====================================
-
-SdStorage storage(
-    Pins::SD_CS,
-    Pins::SPI_SCK,
-    Pins::SPI_MISO,
-    Pins::SPI_MOSI
-);
-
-ConfigService config(storage);
-
-NfcReader nfc(
-    Pins::RFID_CS,
-    Pins::RFID_RST
-);
+#include "AudioFileSourceSD.h"
+#include "AudioGeneratorMP3.h"
+#include "AudioOutputI2S.h"
 
 
-// =====================================
-// Setup
-// =====================================
+// =============================
+// SPI / SD pins
+// =============================
+
+constexpr int SPI_SCK  = 18;
+constexpr int SPI_MISO = 19;
+constexpr int SPI_MOSI = 23;
+
+constexpr int SD_CS = 5;
+
+
+// =============================
+// I2S pins
+// =============================
+
+constexpr int I2S_BCLK = 26;
+constexpr int I2S_LRC  = 25;
+constexpr int I2S_DOUT = 27;
+
+
+// =============================
+// Audio objects
+// =============================
+
+AudioGeneratorMP3* mp3 = nullptr;
+AudioFileSourceSD* file = nullptr;
+AudioOutputI2S* output = nullptr;
+
 
 void setup()
 {
@@ -37,198 +43,146 @@ void setup()
     delay(1000);
 
     Serial.println();
-    Serial.println("================================");
-    Serial.println("       NFC MUSIC PLAYER");
-    Serial.println("      NFC + SD + CONFIG");
-    Serial.println("================================");
+    Serial.println("============================");
+    Serial.println("      MP3 AUDIO TEST");
+    Serial.println("============================");
     Serial.println();
 
 
-    // ---------------------------------
-    // Prepare SPI chip selects
-    // ---------------------------------
+    // -----------------------------
+    // Start SPI / SD
+    // -----------------------------
 
-    pinMode(Pins::SD_CS, OUTPUT);
-    pinMode(Pins::RFID_CS, OUTPUT);
+    pinMode(SD_CS, OUTPUT);
 
-    digitalWrite(Pins::SD_CS, HIGH);
-    digitalWrite(Pins::RFID_CS, HIGH);
-
-    delay(100);
-
-
-    // ---------------------------------
-    // Start shared SPI bus ONCE
-    // ---------------------------------
-
-    SPI.begin(
-        Pins::SPI_SCK,
-        Pins::SPI_MISO,
-        Pins::SPI_MOSI
+    digitalWrite(
+        SD_CS,
+        HIGH
     );
 
-    delay(100);
+    SPI.begin(
+        SPI_SCK,
+        SPI_MISO,
+        SPI_MOSI
+    );
 
+    Serial.println("[BOOT] Mounting SD...");
 
-    // ---------------------------------
-    // SD card
-    // ---------------------------------
-
-    Serial.println("[BOOT] SD card");
-
-    if (!storage.begin())
+    if (!SD.begin(
+        SD_CS,
+        SPI,
+        4000000
+    ))
     {
-        Serial.println("[FAIL] SD card");
+        Serial.println(
+            "[FAIL] SD mount failed"
+        );
+
         return;
     }
-
-    Serial.println("[ OK ] SD card");
-
-
-    // ---------------------------------
-    // Config
-    // ---------------------------------
-
-    Serial.println();
-    Serial.println("[BOOT] Config");
-
-    if (!config.load())
-    {
-        Serial.println("[FAIL] Config");
-        return;
-    }
-
-    Serial.println("[ OK ] Config");
-
-    Serial.print("[CONFIG] Version: ");
-    Serial.println(config.getVersion());
-
-    Serial.print("[CONFIG] Discs: ");
-    Serial.println(config.getDiscCount());
-
-
-    // ---------------------------------
-    // NFC reader
-    // ---------------------------------
-
-    Serial.println();
-    Serial.println("[BOOT] NFC reader");
-
-    nfc.begin();
-
-    Serial.println("[ OK ] NFC reader");
-
-
-    Serial.println();
-    Serial.println("================================");
-    Serial.println("          SYSTEM READY");
-    Serial.println("================================");
-    Serial.println();
 
     Serial.println(
-        "Place a sticker near the reader..."
+        "[ OK ] SD mounted"
+    );
+
+
+    // -----------------------------
+    // Confirm MP3
+    // -----------------------------
+
+    if (!SD.exists("/music/Loser.mp3"))
+    {
+        Serial.println(
+            "[FAIL] Loser.mp3 not found"
+        );
+
+        return;
+    }
+
+    Serial.println(
+        "[ OK ] Loser.mp3 found"
+    );
+
+
+    // -----------------------------
+    // Audio output
+    // -----------------------------
+
+    Serial.println(
+        "[BOOT] Initialising I2S..."
+    );
+
+    output =
+        new AudioOutputI2S();
+
+    output->SetPinout(
+        I2S_BCLK,
+        I2S_LRC,
+        I2S_DOUT
+    );
+
+
+    // Start low so we don't blast speaker
+    output->SetGain(0.40);
+
+
+    // MAX98357A is mono.
+    // This mixes stereo tracks to mono.
+    output->SetOutputModeMono(true);
+
+
+    // -----------------------------
+    // MP3 source
+    // -----------------------------
+
+    file =
+        new AudioFileSourceSD(
+            "/music/Loser.mp3"
+        );
+
+    mp3 =
+        new AudioGeneratorMP3();
+
+
+    Serial.println(
+        "[PLAYER] Starting Loser.mp3..."
+    );
+
+
+    if (!mp3->begin(
+        file,
+        output
+    ))
+    {
+        Serial.println(
+            "[FAIL] MP3 start failed"
+        );
+
+        return;
+    }
+
+
+    Serial.println(
+        "[ OK ] Playback started"
     );
 }
 
 
-// =====================================
-// Main loop
-// =====================================
-
 void loop()
 {
-    String uid;
-
-
-    // ---------------------------------
-    // Try reading NFC tag
-    // ---------------------------------
-
-    if (!nfc.readUid(uid))
+    if (
+        mp3 != nullptr &&
+        mp3->isRunning()
+    )
     {
-        return;
+        if (!mp3->loop())
+        {
+            mp3->stop();
+
+            Serial.println();
+            Serial.println(
+                "[PLAYER] Song finished"
+            );
+        }
     }
-
-
-    Serial.println();
-    Serial.println("------------------------------");
-
-    Serial.print("[NFC] UID: ");
-    Serial.println(uid);
-
-
-    // ---------------------------------
-    // Find disc in config
-    // ---------------------------------
-
-    DiscInfo disc;
-
-    if (!config.findByUid(uid, disc))
-    {
-        Serial.println(
-            "[DISC] Unknown NFC sticker"
-        );
-
-        Serial.println("------------------------------");
-
-        delay(500);
-
-        return;
-    }
-
-
-    Serial.print("[DISC] Disc #: ");
-    Serial.println(disc.discId);
-
-
-    // ---------------------------------
-    // Check whether assigned
-    // ---------------------------------
-
-    if (disc.file.length() == 0)
-    {
-        Serial.println(
-            "[DISC] No song assigned"
-        );
-
-        Serial.println("------------------------------");
-
-        delay(500);
-
-        return;
-    }
-
-
-    Serial.print("[DISC] Title: ");
-    Serial.println(disc.title);
-
-    Serial.print("[DISC] File: ");
-    Serial.println(disc.file);
-
-
-    // ---------------------------------
-    // Confirm MP3 file exists
-    // ---------------------------------
-
-    if (storage.exists(disc.file))
-    {
-        Serial.println(
-            "[ OK ] MP3 file exists"
-        );
-
-        Serial.println(
-            "[PLAYER] Ready to play"
-        );
-    }
-    else
-    {
-        Serial.println(
-            "[FAIL] MP3 file missing"
-        );
-    }
-
-
-    Serial.println("------------------------------");
-
-    delay(1000);
 }
