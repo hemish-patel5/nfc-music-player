@@ -1,56 +1,13 @@
 #include <Arduino.h>
 #include <SPI.h>
+#include <SD.h>
 
-#include "Pins.h"
+#define SPI_SCK   18
+#define SPI_MISO  19
+#define SPI_MOSI  23
 
-#include "RotaryEncoder.h"
-#include "SdStorage.h"
-#include "ConfigService.h"
-#include "NfcReader.h"
-
-
-// =====================================
-// Hardware/services
-// =====================================
-
-RotaryEncoder encoder(
-    Pins::ENCODER_CLK,
-    Pins::ENCODER_DT,
-    Pins::ENCODER_SW
-);
-
-
-SdStorage storage(
-    Pins::SD_CS,
-    Pins::SPI_SCK,
-    Pins::SPI_MISO,
-    Pins::SPI_MOSI
-);
-
-
-ConfigService config(
-    storage
-);
-
-
-NfcReader nfc(
-    Pins::RFID_CS,
-    Pins::RFID_RST
-);
-
-
-// =====================================
-// Player state
-// =====================================
-
-int volume = 10;
-
-bool paused = false;
-
-
-// =====================================
-// Setup
-// =====================================
+#define SD_CS     5
+#define RFID_CS   21
 
 void setup()
 {
@@ -58,77 +15,43 @@ void setup()
 
     delay(1000);
 
-
     Serial.println();
-    Serial.println(
-        "================================"
+    Serial.println("======================");
+    Serial.println(" SHARED SPI SD TEST");
+    Serial.println("======================");
+
+
+    // Both devices deselected
+    pinMode(SD_CS, OUTPUT);
+    pinMode(RFID_CS, OUTPUT);
+
+    digitalWrite(SD_CS, HIGH);
+    digitalWrite(RFID_CS, HIGH);
+
+    delay(100);
+
+
+    // Shared SPI bus
+    SPI.begin(
+        SPI_SCK,
+        SPI_MISO,
+        SPI_MOSI
     );
 
-    Serial.println(
-        "        NFC MUSIC PLAYER"
-    );
-
-    Serial.println(
-        "================================"
-    );
+    delay(100);
 
 
-    // ---------------------------------
-    // Prepare SPI devices
-    // ---------------------------------
-
-    pinMode(
-        Pins::SD_CS,
-        OUTPUT
-    );
-
-    pinMode(
-        Pins::RFID_CS,
-        OUTPUT
-    );
+    Serial.println("Mounting SD...");
 
 
-    digitalWrite(
-        Pins::SD_CS,
-        HIGH
-    );
-
-    digitalWrite(
-        Pins::RFID_CS,
-        HIGH
-    );
-
-
-    // ---------------------------------
-    // Encoder
-    // ---------------------------------
-
-    Serial.println();
-    Serial.println(
-        "[BOOT] Rotary encoder"
-    );
-
-    encoder.begin();
-
-    Serial.println(
-        "[ OK ] Encoder"
-    );
-
-
-    // ---------------------------------
-    // SD
-    // ---------------------------------
-
-    Serial.println();
-    Serial.println(
-        "[BOOT] SD card"
-    );
-
-
-    if (!storage.begin())
+    if (!SD.begin(
+        SD_CS,
+        SPI,
+        4000000
+    ))
     {
         Serial.println(
-            "[FAIL] SD card"
+            "SD MOUNT FAILED"
         );
 
         return;
@@ -136,248 +59,69 @@ void setup()
 
 
     Serial.println(
-        "[ OK ] SD card"
+        "SD MOUNT SUCCESS"
     );
 
 
-    // ---------------------------------
-    // Configuration
-    // ---------------------------------
+    Serial.print("Card size: ");
+
+    Serial.print(
+        SD.cardSize() /
+        (1024ULL * 1024ULL)
+    );
+
+    Serial.println(" MB");
+
 
     Serial.println();
-    Serial.println(
-        "[BOOT] Configuration"
-    );
+    Serial.println("Files in /music:");
 
 
-    if (!config.load())
+    File directory =
+        SD.open("/music");
+
+
+    if (!directory)
     {
         Serial.println(
-            "[FAIL] Configuration"
+            "Could not open /music"
         );
 
         return;
     }
 
 
-    Serial.println(
-        "[ OK ] Configuration"
-    );
+    File file =
+        directory.openNextFile();
 
 
-    // ---------------------------------
-    // NFC
-    // ---------------------------------
+    while (file)
+    {
+        Serial.print("  ");
+
+        Serial.print(
+            file.name()
+        );
+
+        Serial.print(" - ");
+
+        Serial.print(
+            file.size()
+        );
+
+        Serial.println(" bytes");
+
+
+        file =
+            directory.openNextFile();
+    }
+
 
     Serial.println();
-    Serial.println(
-        "[BOOT] NFC reader"
-    );
-
-
-    nfc.begin();
-
-
-    Serial.println();
-    Serial.println(
-        "================================"
-    );
-
-    Serial.println(
-        "          SYSTEM READY"
-    );
-
-    Serial.println(
-        "================================"
-    );
-
-    Serial.println();
-
-    Serial.println(
-        "Place an NFC disc on the reader..."
-    );
+    Serial.println("Test complete.");
 }
 
 
-// =====================================
-// Main loop
-// =====================================
-
 void loop()
 {
-    // =================================
-    // Rotary encoder
-    // =================================
-
-    EncoderEvent event =
-        encoder.update();
-
-
-    switch (event)
-    {
-        case EncoderEvent::CLOCKWISE:
-
-            if (volume < 20)
-            {
-                volume++;
-            }
-
-            Serial.print(
-                "[VOLUME] "
-            );
-
-            Serial.println(volume);
-
-            break;
-
-
-        case EncoderEvent::COUNTER_CLOCKWISE:
-
-            if (volume > 0)
-            {
-                volume--;
-            }
-
-            Serial.print(
-                "[VOLUME] "
-            );
-
-            Serial.println(volume);
-
-            break;
-
-
-        case EncoderEvent::BUTTON_PRESSED:
-
-            paused = !paused;
-
-            Serial.println(
-                paused
-                    ? "[PLAYER] PAUSED"
-                    : "[PLAYER] PLAYING"
-            );
-
-            break;
-
-
-        case EncoderEvent::NONE:
-            break;
-    }
-
-
-    // =================================
-    // NFC
-    // =================================
-
-    String uid;
-
-
-    if (nfc.readUid(uid))
-    {
-        Serial.println();
-
-        Serial.println(
-            "------------------------------"
-        );
-
-
-        Serial.print(
-            "[NFC] UID: "
-        );
-
-        Serial.println(uid);
-
-
-        DiscInfo disc;
-
-
-        if (!config.findByUid(uid, disc))
-        {
-            Serial.println(
-                "[DISC] Unknown NFC tag"
-            );
-
-            Serial.println(
-                "------------------------------"
-            );
-
-            return;
-        }
-
-
-        Serial.print(
-            "[DISC] Disc: "
-        );
-
-        Serial.println(
-            disc.discId
-        );
-
-
-        // Check whether assigned
-
-        if (
-            disc.file.length() == 0
-        )
-        {
-            Serial.println(
-                "[DISC] No song assigned"
-            );
-
-            Serial.println(
-                "------------------------------"
-            );
-
-            return;
-        }
-
-
-        Serial.print(
-            "[DISC] Title: "
-        );
-
-        Serial.println(
-            disc.title
-        );
-
-
-        Serial.print(
-            "[DISC] File: "
-        );
-
-        Serial.println(
-            disc.file
-        );
-
-
-        // Check actual SD file
-
-        if (
-            storage.exists(
-                disc.file
-            )
-        )
-        {
-            Serial.println(
-                "[ OK ] Music file exists"
-            );
-
-            Serial.println(
-                "[PLAYER] Ready to play!"
-            );
-        }
-        else
-        {
-            Serial.println(
-                "[FAIL] Music file missing"
-            );
-        }
-
-
-        Serial.println(
-            "------------------------------"
-        );
-
-        Serial.println();
-    }
 }

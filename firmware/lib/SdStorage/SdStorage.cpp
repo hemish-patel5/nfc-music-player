@@ -26,14 +26,13 @@ bool SdStorage::begin()
     pinMode(_csPin, OUTPUT);
     digitalWrite(_csPin, HIGH);
 
-    SPI.begin(
-        _sckPin,
-        _misoPin,
-        _mosiPin,
-        _csPin
-    );
+    delay(10);
 
-    if (!SD.begin(_csPin, SPI))
+    // IMPORTANT:
+    // SPI.begin() is NOT called here.
+    // main.cpp owns the shared SPI bus.
+
+    if (!SD.begin(_csPin, SPI, 4000000))
     {
         Serial.println("[SD] ERROR: Mount failed");
 
@@ -44,7 +43,9 @@ bool SdStorage::begin()
 
     if (SD.cardType() == CARD_NONE)
     {
-        Serial.println("[SD] ERROR: No SD card detected");
+        Serial.println(
+            "[SD] ERROR: No SD card detected"
+        );
 
         _mounted = false;
 
@@ -53,11 +54,12 @@ bool SdStorage::begin()
 
     _mounted = true;
 
-    Serial.println("[SD] Card mounted successfully");
+    Serial.println(
+        "[SD] Card mounted successfully"
+    );
 
     return true;
 }
-
 
 bool SdStorage::exists(const String& path)
 {
