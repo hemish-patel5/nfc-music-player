@@ -1,5 +1,6 @@
 #include "RotaryEncoder.h"
 
+
 RotaryEncoder::RotaryEncoder(
     int clkPin,
     int dtPin,
@@ -8,74 +9,138 @@ RotaryEncoder::RotaryEncoder(
     : _clkPin(clkPin),
       _dtPin(dtPin),
       _buttonPin(buttonPin),
-      _lastClkState(HIGH),
+      _lastCount(0),
+      _pendingSteps(0),
       _lastButtonState(HIGH),
       _lastButtonTime(0)
 {
 }
 
+
 void RotaryEncoder::begin()
 {
-    pinMode(_clkPin, INPUT_PULLUP);
-    pinMode(_dtPin, INPUT_PULLUP);
-    pinMode(_buttonPin, INPUT_PULLUP);
+    ESP32Encoder::useInternalWeakPullResistors =
+        puType::up;
 
-    _lastClkState = digitalRead(_clkPin);
-    _lastButtonState = digitalRead(_buttonPin);
+
+    // Reversed pin order fixes your direction.
+    _encoder.attachHalfQuad(
+        _dtPin,
+        _clkPin
+    );
+
+
+    _encoder.setFilter(1023);
+
+    _encoder.clearCount();
+
+    _lastCount = 0;
+    _pendingSteps = 0;
+
+
+    pinMode(
+        _buttonPin,
+        INPUT_PULLUP
+    );
+
+
+    _lastButtonState =
+        digitalRead(_buttonPin);
+
+    _lastButtonTime =
+        millis();
 }
+
 
 EncoderEvent RotaryEncoder::update()
 {
-    // -------------------------
-    // Rotary movement
-    // -------------------------
+    // =====================================
+    // ROTATION
+    // =====================================
 
-    int currentClkState = digitalRead(_clkPin);
+    int64_t rawCount =
+        _encoder.getCount();
 
-    if (currentClkState != _lastClkState) {
 
-        // Only detect one edge to avoid counting twice
-        if (currentClkState == LOW) {
+    /*
+        Your encoder is producing roughly
+        2 counts per physical click/detent.
 
-            int dtState = digitalRead(_dtPin);
+        Divide by 2 so one physical click
+        becomes one volume step.
+    */
+    int64_t currentCount =
+        rawCount / 2;
 
-            _lastClkState = currentClkState;
 
-            if (dtState != currentClkState) {
-                return EncoderEvent::CLOCKWISE;
-            } else {
-                return EncoderEvent::COUNTER_CLOCKWISE;
-            }
-        }
+    int64_t difference =
+        currentCount - _lastCount;
 
-        _lastClkState = currentClkState;
+
+    _lastCount =
+        currentCount;
+
+
+    _pendingSteps +=
+        difference;
+
+
+    if (_pendingSteps > 0)
+    {
+        _pendingSteps--;
+
+        return EncoderEvent::CLOCKWISE;
     }
 
-    // -------------------------
-    // Push button
-    // -------------------------
+
+    if (_pendingSteps < 0)
+    {
+        _pendingSteps++;
+
+        return EncoderEvent::COUNTER_CLOCKWISE;
+    }
+
+
+    // =====================================
+    // BUTTON
+    // =====================================
 
     int currentButtonState =
         digitalRead(_buttonPin);
 
-    if (currentButtonState != _lastButtonState) {
 
-        if (millis() - _lastButtonTime > 50) {
+    if (
+        currentButtonState !=
+        _lastButtonState
+    )
+    {
+        unsigned long now =
+            millis();
 
-            _lastButtonTime = millis();
 
-            if (currentButtonState == LOW) {
+        if (
+            now - _lastButtonTime
+            >= 50
+        )
+        {
+            _lastButtonTime =
+                now;
 
-                _lastButtonState =
-                    currentButtonState;
+            _lastButtonState =
+                currentButtonState;
 
-                return EncoderEvent::BUTTON_PRESSED;
+
+            if (
+                currentButtonState == LOW
+            )
+            {
+                return
+                    EncoderEvent::
+                    BUTTON_PRESSED;
             }
         }
-
-        _lastButtonState =
-            currentButtonState;
     }
+
 
     return EncoderEvent::NONE;
 }

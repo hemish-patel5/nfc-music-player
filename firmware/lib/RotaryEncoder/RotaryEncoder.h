@@ -1,16 +1,20 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ESP32Encoder.h>
 
-enum class EncoderEvent {
+
+enum class EncoderEvent
+{
     NONE,
     CLOCKWISE,
     COUNTER_CLOCKWISE,
     BUTTON_PRESSED
 };
 
-class RotaryEncoder {
 
+class RotaryEncoder
+{
 public:
     RotaryEncoder(
         int clkPin,
@@ -22,12 +26,17 @@ public:
 
     EncoderEvent update();
 
+
 private:
     int _clkPin;
     int _dtPin;
     int _buttonPin;
 
-    int _lastClkState;
+    ESP32Encoder _encoder;
+
+    int64_t _lastCount;
+    int64_t _pendingSteps;
+
     int _lastButtonState;
 
     unsigned long _lastButtonTime;
