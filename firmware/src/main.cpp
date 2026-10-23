@@ -1,40 +1,53 @@
 #include <Arduino.h>
 #include <SPI.h>
-#include <SD.h>
 
-#include "AudioFileSourceSD.h"
-#include "AudioGeneratorMP3.h"
-#include "AudioOutputI2S.h"
-
-
-// =============================
-// SPI / SD pins
-// =============================
-
-constexpr int SPI_SCK  = 18;
-constexpr int SPI_MISO = 19;
-constexpr int SPI_MOSI = 23;
-
-constexpr int SD_CS = 5;
+#include "Pins.h"
+#include "SdStorage.h"
+#include "ConfigService.h"
+#include "NfcReader.h"
+#include "AudioPlayer.h"
 
 
-// =============================
-// I2S pins
-// =============================
+// =====================================
+// Services
+// =====================================
 
-constexpr int I2S_BCLK = 26;
-constexpr int I2S_LRC  = 25;
-constexpr int I2S_DOUT = 27;
+SdStorage storage(
+    Pins::SD_CS,
+    Pins::SPI_SCK,
+    Pins::SPI_MISO,
+    Pins::SPI_MOSI
+);
 
 
-// =============================
-// Audio objects
-// =============================
+ConfigService config(
+    storage
+);
 
-AudioGeneratorMP3* mp3 = nullptr;
-AudioFileSourceSD* file = nullptr;
-AudioOutputI2S* output = nullptr;
 
+NfcReader nfc(
+    Pins::RFID_CS,
+    Pins::RFID_RST
+);
+
+
+AudioPlayer audio(
+    Pins::I2S_BCLK,
+    Pins::I2S_LRC,
+    Pins::I2S_DOUT
+);
+
+
+// =====================================
+// State
+// =====================================
+
+String lastUid = "";
+
+
+// =====================================
+// Setup
+// =====================================
 
 void setup()
 {
@@ -42,120 +55,68 @@ void setup()
 
     delay(1000);
 
+
     Serial.println();
-    Serial.println("============================");
-    Serial.println("      MP3 AUDIO TEST");
-    Serial.println("============================");
+    Serial.println("================================");
+    Serial.println("       NFC MUSIC PLAYER");
+    Serial.println("     NFC + SD + AUDIO TEST");
+    Serial.println("================================");
     Serial.println();
 
 
-    // -----------------------------
-    // Start SPI / SD
-    // -----------------------------
+    // ---------------------------------
+    // Prepare SPI devices
+    // ---------------------------------
 
-    pinMode(SD_CS, OUTPUT);
+    pinMode(
+        Pins::SD_CS,
+        OUTPUT
+    );
+
+    pinMode(
+        Pins::RFID_CS,
+        OUTPUT
+    );
+
 
     digitalWrite(
-        SD_CS,
+        Pins::SD_CS,
         HIGH
     );
 
+    digitalWrite(
+        Pins::RFID_CS,
+        HIGH
+    );
+
+
+    // ---------------------------------
+    // Shared SPI bus
+    // ---------------------------------
+
     SPI.begin(
-        SPI_SCK,
-        SPI_MISO,
-        SPI_MOSI
+        Pins::SPI_SCK,
+        Pins::SPI_MISO,
+        Pins::SPI_MOSI
     );
 
-    Serial.println("[BOOT] Mounting SD...");
 
-    if (!SD.begin(
-        SD_CS,
-        SPI,
-        4000000
-    ))
+    delay(100);
+
+
+    // ---------------------------------
+    // SD
+    // ---------------------------------
+
+    Serial.println(
+        "[BOOT] SD card"
+    );
+
+
+    if (!storage.begin())
     {
         Serial.println(
-            "[FAIL] SD mount failed"
-        );
-
-        return;
-    }
-
-    Serial.println(
-        "[ OK ] SD mounted"
-    );
-
-
-    // -----------------------------
-    // Confirm MP3
-    // -----------------------------
-
-    if (!SD.exists("/music/Loser.mp3"))
-    {
-        Serial.println(
-            "[FAIL] Loser.mp3 not found"
-        );
-
-        return;
-    }
-
-    Serial.println(
-        "[ OK ] Loser.mp3 found"
-    );
-
-
-    // -----------------------------
-    // Audio output
-    // -----------------------------
-
-    Serial.println(
-        "[BOOT] Initialising I2S..."
-    );
-
-    output =
-        new AudioOutputI2S();
-
-    output->SetPinout(
-        I2S_BCLK,
-        I2S_LRC,
-        I2S_DOUT
-    );
-
-
-    // Start low so we don't blast speaker
-    output->SetGain(0.40);
-
-
-    // MAX98357A is mono.
-    // This mixes stereo tracks to mono.
-    output->SetOutputModeMono(true);
-
-
-    // -----------------------------
-    // MP3 source
-    // -----------------------------
-
-    file =
-        new AudioFileSourceSD(
-            "/music/Loser.mp3"
-        );
-
-    mp3 =
-        new AudioGeneratorMP3();
-
-
-    Serial.println(
-        "[PLAYER] Starting Loser.mp3..."
-    );
-
-
-    if (!mp3->begin(
-        file,
-        output
-    ))
-    {
-        Serial.println(
-            "[FAIL] MP3 start failed"
+            "[FAIL] SD"
         );
 
         return;
@@ -163,26 +124,260 @@ void setup()
 
 
     Serial.println(
-        "[ OK ] Playback started"
+        "[ OK ] SD"
+    );
+
+
+    // ---------------------------------
+    // Config
+    // ---------------------------------
+
+    Serial.println();
+    Serial.println(
+        "[BOOT] Config"
+    );
+
+
+    if (!config.load())
+    {
+        Serial.println(
+            "[FAIL] Config"
+        );
+
+        return;
+    }
+
+
+    Serial.println(
+        "[ OK ] Config"
+    );
+
+
+    // ---------------------------------
+    // NFC
+    // ---------------------------------
+
+    Serial.println();
+    Serial.println(
+        "[BOOT] NFC"
+    );
+
+
+    nfc.begin();
+
+
+    Serial.println(
+        "[ OK ] NFC"
+    );
+
+
+    // ---------------------------------
+    // Audio
+    // ---------------------------------
+
+    Serial.println();
+    Serial.println(
+        "[BOOT] Audio"
+    );
+
+
+    if (!audio.begin())
+    {
+        Serial.println(
+            "[FAIL] Audio"
+        );
+
+        return;
+    }
+
+
+    Serial.println(
+        "[ OK ] Audio"
+    );
+
+
+    Serial.println();
+    Serial.println("================================");
+    Serial.println("          SYSTEM READY");
+    Serial.println("================================");
+    Serial.println();
+
+    Serial.println(
+        "Scan sticker #1 or #2..."
     );
 }
 
 
+// =====================================
+// Main loop
+// =====================================
+
 void loop()
 {
+    // IMPORTANT:
+    // Audio must be serviced continuously.
+    audio.update();
+
+
+    // ---------------------------------
+    // NFC
+    // ---------------------------------
+
+    String uid;
+
+
+    if (!nfc.readUid(uid))
+    {
+        return;
+    }
+
+
+    Serial.println();
+    Serial.println(
+        "------------------------------"
+    );
+
+
+    Serial.print(
+        "[NFC] UID: "
+    );
+
+    Serial.println(uid);
+
+
+    // ---------------------------------
+    // Prevent immediate restart
+    // ---------------------------------
+
+    if (uid == lastUid)
+    {
+        Serial.println(
+            "[NFC] Same disc already selected"
+        );
+
+        Serial.println(
+            "------------------------------"
+        );
+
+        return;
+    }
+
+
+    // ---------------------------------
+    // Config lookup
+    // ---------------------------------
+
+    DiscInfo disc;
+
+
+    if (!config.findByUid(
+        uid,
+        disc
+    ))
+    {
+        Serial.println(
+            "[DISC] Unknown sticker"
+        );
+
+        Serial.println(
+            "------------------------------"
+        );
+
+        return;
+    }
+
+
+    Serial.print(
+        "[DISC] Disc #: "
+    );
+
+    Serial.println(
+        disc.discId
+    );
+
+
+    if (disc.file.length() == 0)
+    {
+        Serial.println(
+            "[DISC] No song assigned"
+        );
+
+        Serial.println(
+            "------------------------------"
+        );
+
+        return;
+    }
+
+
+    Serial.print(
+        "[DISC] Title: "
+    );
+
+    Serial.println(
+        disc.title
+    );
+
+
+    Serial.print(
+        "[DISC] File: "
+    );
+
+    Serial.println(
+        disc.file
+    );
+
+
+    // ---------------------------------
+    // Check file
+    // ---------------------------------
+
+    if (!storage.exists(
+        disc.file
+    ))
+    {
+        Serial.println(
+            "[FAIL] MP3 missing"
+        );
+
+        Serial.println(
+            "------------------------------"
+        );
+
+        return;
+    }
+
+
+    // ---------------------------------
+    // Play
+    // ---------------------------------
+
+    Serial.println(
+        "[PLAYER] Starting song..."
+    );
+
+
     if (
-        mp3 != nullptr &&
-        mp3->isRunning()
+        audio.play(
+            disc.file
+        )
     )
     {
-        if (!mp3->loop())
-        {
-            mp3->stop();
+        Serial.println(
+            "[PLAYER] Playing"
+        );
 
-            Serial.println();
-            Serial.println(
-                "[PLAYER] Song finished"
-            );
-        }
+        lastUid = uid;
     }
+    else
+    {
+        Serial.println(
+            "[PLAYER] Failed"
+        );
+    }
+
+
+    Serial.println(
+        "------------------------------"
+    );
 }
