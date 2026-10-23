@@ -2,10 +2,12 @@
 #include <SPI.h>
 
 #include "Pins.h"
+
 #include "SdStorage.h"
 #include "ConfigService.h"
 #include "NfcReader.h"
 #include "AudioPlayer.h"
+#include "RotaryEncoder.h"
 
 
 // =====================================
@@ -38,11 +40,20 @@ AudioPlayer audio(
 );
 
 
+RotaryEncoder encoder(
+    Pins::ENCODER_CLK,
+    Pins::ENCODER_DT,
+    Pins::ENCODER_SW
+);
+
+
 // =====================================
 // State
 // =====================================
 
 String lastUid = "";
+
+int volume = 10;
 
 
 // =====================================
@@ -57,16 +68,24 @@ void setup()
 
 
     Serial.println();
-    Serial.println("================================");
-    Serial.println("       NFC MUSIC PLAYER");
-    Serial.println("     NFC + SD + AUDIO TEST");
-    Serial.println("================================");
+    Serial.println(
+        "================================"
+    );
+
+    Serial.println(
+        "       NFC MUSIC PLAYER"
+    );
+
+    Serial.println(
+        "================================"
+    );
+
     Serial.println();
 
 
-    // ---------------------------------
-    // Prepare SPI devices
-    // ---------------------------------
+    // =================================
+    // SPI
+    // =================================
 
     pinMode(
         Pins::SD_CS,
@@ -89,10 +108,6 @@ void setup()
         HIGH
     );
 
-
-    // ---------------------------------
-    // Shared SPI bus
-    // ---------------------------------
 
     SPI.begin(
         Pins::SPI_SCK,
@@ -104,12 +119,27 @@ void setup()
     delay(100);
 
 
-    // ---------------------------------
-    // SD
-    // ---------------------------------
+    // =================================
+    // Encoder
+    // =================================
 
     Serial.println(
-        "[BOOT] SD card"
+        "[BOOT] Encoder"
+    );
+
+    encoder.begin();
+
+    Serial.println(
+        "[ OK ] Encoder"
+    );
+
+
+    // =================================
+    // SD
+    // =================================
+
+    Serial.println(
+        "[BOOT] SD"
     );
 
 
@@ -128,11 +158,10 @@ void setup()
     );
 
 
-    // ---------------------------------
+    // =================================
     // Config
-    // ---------------------------------
+    // =================================
 
-    Serial.println();
     Serial.println(
         "[BOOT] Config"
     );
@@ -153,29 +182,25 @@ void setup()
     );
 
 
-    // ---------------------------------
+    // =================================
     // NFC
-    // ---------------------------------
+    // =================================
 
-    Serial.println();
     Serial.println(
         "[BOOT] NFC"
     );
 
-
     nfc.begin();
-
 
     Serial.println(
         "[ OK ] NFC"
     );
 
 
-    // ---------------------------------
+    // =================================
     // Audio
-    // ---------------------------------
+    // =================================
 
-    Serial.println();
     Serial.println(
         "[BOOT] Audio"
     );
@@ -191,19 +216,39 @@ void setup()
     }
 
 
+    // Initial volume
+    audio.setVolume(volume);
+
+
     Serial.println(
         "[ OK ] Audio"
     );
 
 
+    Serial.print(
+        "[VOLUME] "
+    );
+
+    Serial.println(volume);
+
+
     Serial.println();
-    Serial.println("================================");
-    Serial.println("          SYSTEM READY");
-    Serial.println("================================");
+    Serial.println(
+        "================================"
+    );
+
+    Serial.println(
+        "          SYSTEM READY"
+    );
+
+    Serial.println(
+        "================================"
+    );
+
     Serial.println();
 
     Serial.println(
-        "Scan sticker #1 or #2..."
+        "Scan an NFC disc..."
     );
 }
 
@@ -214,14 +259,121 @@ void setup()
 
 void loop()
 {
-    // IMPORTANT:
-    // Audio must be serviced continuously.
+    // =================================
+    // AUDIO
+    // =================================
+
+    // Very important:
+    // this must run constantly
     audio.update();
 
 
-    // ---------------------------------
+    // =================================
+    // ENCODER
+    // =================================
+
+    EncoderEvent event =
+        encoder.update();
+
+
+    switch (event)
+    {
+        // -----------------------------
+        // Volume up
+        // -----------------------------
+
+        case EncoderEvent::CLOCKWISE:
+        {
+            if (volume < 20)
+            {
+                volume++;
+            }
+
+
+            audio.setVolume(volume);
+
+
+            Serial.print(
+                "[VOLUME] "
+            );
+
+            Serial.print(volume);
+
+            Serial.println(
+                " / 20"
+            );
+
+            break;
+        }
+
+
+        // -----------------------------
+        // Volume down
+        // -----------------------------
+
+        case EncoderEvent::COUNTER_CLOCKWISE:
+        {
+            if (volume > 0)
+            {
+                volume--;
+            }
+
+
+            audio.setVolume(volume);
+
+
+            Serial.print(
+                "[VOLUME] "
+            );
+
+            Serial.print(volume);
+
+            Serial.println(
+                " / 20"
+            );
+
+            break;
+        }
+
+
+        // -----------------------------
+        // Play / Pause
+        // -----------------------------
+
+        case EncoderEvent::BUTTON_PRESSED:
+        {
+            audio.togglePause();
+
+
+            if (audio.isPlaying())
+            {
+                if (audio.isPaused())
+                {
+                    Serial.println(
+                        "[PLAYER] PAUSED"
+                    );
+                }
+                else
+                {
+                    Serial.println(
+                        "[PLAYER] PLAYING"
+                    );
+                }
+            }
+
+
+            break;
+        }
+
+
+        case EncoderEvent::NONE:
+            break;
+    }
+
+
+    // =================================
     // NFC
-    // ---------------------------------
+    // =================================
 
     String uid;
 
@@ -245,9 +397,9 @@ void loop()
     Serial.println(uid);
 
 
-    // ---------------------------------
-    // Prevent immediate restart
-    // ---------------------------------
+    // =================================
+    // Same disc protection
+    // =================================
 
     if (uid == lastUid)
     {
@@ -263,9 +415,9 @@ void loop()
     }
 
 
-    // ---------------------------------
+    // =================================
     // Config lookup
-    // ---------------------------------
+    // =================================
 
     DiscInfo disc;
 
@@ -276,7 +428,7 @@ void loop()
     ))
     {
         Serial.println(
-            "[DISC] Unknown sticker"
+            "[DISC] Unknown NFC disc"
         );
 
         Serial.println(
@@ -328,9 +480,9 @@ void loop()
     );
 
 
-    // ---------------------------------
-    // Check file
-    // ---------------------------------
+    // =================================
+    // Check MP3
+    // =================================
 
     if (!storage.exists(
         disc.file
@@ -348,26 +500,24 @@ void loop()
     }
 
 
-    // ---------------------------------
-    // Play
-    // ---------------------------------
+    // =================================
+    // Play song
+    // =================================
 
     Serial.println(
-        "[PLAYER] Starting song..."
+        "[PLAYER] Starting..."
     );
 
 
-    if (
-        audio.play(
-            disc.file
-        )
-    )
+    if (audio.play(
+        disc.file
+    ))
     {
-        Serial.println(
-            "[PLAYER] Playing"
-        );
-
         lastUid = uid;
+
+        Serial.println(
+            "[PLAYER] PLAYING"
+        );
     }
     else
     {

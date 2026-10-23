@@ -26,9 +26,20 @@ public:
 
     void update();
 
-    bool isPlaying() const;
 
-    void setVolume(float gain);
+    // Playback control
+    void pause();
+    void resume();
+    void togglePause();
+
+    bool isPlaying() const;
+    bool isPaused() const;
+
+
+    // Volume: 0 - 20
+    void setVolume(int volume);
+
+    int getVolume() const;
 
 
 private:
@@ -41,4 +52,7 @@ private:
     AudioOutputI2S* _output;
 
     bool _initialised;
+    bool _paused;
+
+    int _volume;
 };

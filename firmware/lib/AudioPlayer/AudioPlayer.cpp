@@ -14,10 +14,16 @@ AudioPlayer::AudioPlayer(
       _mp3(nullptr),
       _file(nullptr),
       _output(nullptr),
-      _initialised(false)
+      _initialised(false),
+      _paused(false),
+      _volume(10)
 {
 }
 
+
+// =====================================
+// Begin
+// =====================================
 
 bool AudioPlayer::begin()
 {
@@ -30,7 +36,7 @@ bool AudioPlayer::begin()
     if (_output == nullptr)
     {
         Serial.println(
-            "[AUDIO] Failed to create I2S output"
+            "[AUDIO] Failed to create output"
         );
 
         return false;
@@ -44,10 +50,7 @@ bool AudioPlayer::begin()
     );
 
 
-    // Start at a safe volume
-    _output->SetGain(0.30);
-
-    // Your MAX98357A is mono
+    // MAX98357A mono output
     _output->SetOutputModeMono(true);
 
 
@@ -66,14 +69,21 @@ bool AudioPlayer::begin()
     _initialised = true;
 
 
+    // Apply starting volume
+    setVolume(_volume);
+
+
     Serial.println(
         "[AUDIO] Ready"
     );
 
-
     return true;
 }
 
+
+// =====================================
+// Play
+// =====================================
 
 bool AudioPlayer::play(
     const String& filename
@@ -89,7 +99,7 @@ bool AudioPlayer::play(
     }
 
 
-    // Stop current song first
+    // Stop previous song
     stop();
 
 
@@ -112,16 +122,15 @@ bool AudioPlayer::play(
     Serial.println(filename);
 
 
-    _file =
-        new AudioFileSourceSD(
-            filename.c_str()
-        );
+    _file = new AudioFileSourceSD(
+        filename.c_str()
+    );
 
 
     if (_file == nullptr)
     {
         Serial.println(
-            "[AUDIO] Failed to open file"
+            "[AUDIO] Failed to create file source"
         );
 
         return false;
@@ -134,7 +143,7 @@ bool AudioPlayer::play(
     ))
     {
         Serial.println(
-            "[AUDIO] MP3 begin failed"
+            "[AUDIO] MP3 start failed"
         );
 
         delete _file;
@@ -145,14 +154,20 @@ bool AudioPlayer::play(
     }
 
 
+    _paused = false;
+
+
     Serial.println(
         "[AUDIO] Playback started"
     );
 
-
     return true;
 }
 
+
+// =====================================
+// Stop
+// =====================================
 
 void AudioPlayer::stop()
 {
@@ -171,13 +186,27 @@ void AudioPlayer::stop()
 
         _file = nullptr;
     }
+
+
+    _paused = false;
 }
 
+
+// =====================================
+// Update
+// =====================================
 
 void AudioPlayer::update()
 {
     if (_mp3 == nullptr)
     {
+        return;
+    }
+
+
+    if (_paused)
+    {
+        // Do not feed more MP3 data while paused
         return;
     }
 
@@ -204,6 +233,101 @@ void AudioPlayer::update()
 }
 
 
+// =====================================
+// Pause
+// =====================================
+
+void AudioPlayer::pause()
+{
+    if (_mp3 == nullptr)
+    {
+        return;
+    }
+
+
+    if (!_mp3->isRunning())
+    {
+        return;
+    }
+
+
+    if (_paused)
+    {
+        return;
+    }
+
+
+    _paused = true;
+
+    Serial.println(
+        "[AUDIO] Paused"
+    );
+}
+
+
+// =====================================
+// Resume
+// =====================================
+
+void AudioPlayer::resume()
+{
+    if (_mp3 == nullptr)
+    {
+        return;
+    }
+
+
+    if (!_mp3->isRunning())
+    {
+        return;
+    }
+
+
+    if (!_paused)
+    {
+        return;
+    }
+
+
+    _paused = false;
+
+    Serial.println(
+        "[AUDIO] Resumed"
+    );
+}
+
+
+// =====================================
+// Toggle pause
+// =====================================
+
+void AudioPlayer::togglePause()
+{
+    if (!isPlaying())
+    {
+        Serial.println(
+            "[AUDIO] Nothing playing"
+        );
+
+        return;
+    }
+
+
+    if (_paused)
+    {
+        resume();
+    }
+    else
+    {
+        pause();
+    }
+}
+
+
+// =====================================
+// Status
+// =====================================
+
 bool AudioPlayer::isPlaying() const
 {
     if (_mp3 == nullptr)
@@ -215,26 +339,60 @@ bool AudioPlayer::isPlaying() const
 }
 
 
+bool AudioPlayer::isPaused() const
+{
+    return _paused;
+}
+
+
+// =====================================
+// Volume
+// =====================================
+
 void AudioPlayer::setVolume(
-    float gain
+    int volume
 )
 {
+    if (volume < 0)
+    {
+        volume = 0;
+    }
+
+    if (volume > 20)
+    {
+        volume = 20;
+    }
+
+
+    _volume = volume;
+
+
     if (_output == nullptr)
     {
         return;
     }
 
 
-    if (gain < 0.0)
-    {
-        gain = 0.0;
-    }
+    /*
+        Encoder range:
 
-    if (gain > 1.0)
-    {
-        gain = 1.0;
-    }
+        0  -> silent
+        10 -> ~25% gain
+        20 -> ~50% gain
+
+        We deliberately cap maximum gain
+        at 0.50 for the small speaker.
+    */
+
+    float gain =
+        (_volume / 20.0f) * 0.50f;
 
 
     _output->SetGain(gain);
+}
+
+
+int AudioPlayer::getVolume() const
+{
+    return _volume;
 }
