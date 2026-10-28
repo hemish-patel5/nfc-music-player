@@ -9,8 +9,12 @@ node_modules/
 dist/
 dist-ssr/
 coverage/
+.nyc_output/
 .vite/
 .turbo/
+.parcel-cache/
+playwright-report/
+test-results/
 .eslintcache
 *.tsbuildinfo
 
@@ -23,12 +27,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# PlatformIO and C/C++ generated files
+# PlatformIO, ESP-IDF, and C/C++ generated files
 .pio/
 .pioenvs/
 .piolibdeps/
 .cache/
+managed_components/
 compile_commands.json
+.sconsign*.dblite
+*.elf
+*.map
 
 # VS Code generated files (keep shared extension recommendations)
 **/.vscode/*
@@ -36,6 +44,7 @@ compile_commands.json
 
 # Other editors and IDEs
 .idea/
+.history/
 *.suo
 *.ntvs*
 *.njsproj
