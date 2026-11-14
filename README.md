@@ -7,6 +7,13 @@ Physical NFC discs are assigned to songs, albums, or playlists using a web dashb
 The dashboard is used to manage the player, while normal playback works completely offline.
 
 ---
+## Physical Music Player
+<img width="1448" height="1086" alt="Steampunk Wooden Desktop Device" src="https://github.com/user-attachments/assets/39f787cf-0bfd-4310-b4a5-42fe715952eb" />
+
+## Web Interface for uploading songs and Detecting Music player. 
+<img width="1912" height="912" alt="nfc_web" src="https://github.com/user-attachments/assets/61516322-401e-4fe7-b042-cfcd46fcd992" />
+
+
 
 ## Project Overview
 
